@@ -1,17 +1,9 @@
 import bcrypt from 'bcrypt'
 import db from '../config/database.js'
-import { userSchema, loginSchema } from '../schemas/authSchema.js'
 import { v4 as uuidV4 } from 'uuid'
 
 export async function signUp(req, res) {
     const { name, email, password, confirmPassword } = req.body
-
-    const { error } = userSchema.validate({ name, email, password, confirmPassword })
-
-    if (error) {
-        const errorMessages = error.details.map(err => err.message)
-        return res.status(422).send(errorMessages)
-    }
 
     const hashPassword = bcrypt.hashSync(password, 10)
 
@@ -30,24 +22,28 @@ export async function signUp(req, res) {
 export async function signIn(req, res) {
     const { email, password } = req.body
 
-    const { error } = loginSchema.validate({email, password})
-
-    if(error){
-        const errorMessages = error.details.map(err => err.message)
-        return res.status(422).send(errorMessages)
-    }
-
-    try{
-        const isUserSignedUp = await db.collection("users").findOne({email})
+    try {
+        const isUserSignedUp = await db.collection("users").findOne({ email })
         if (!isUserSignedUp) return res.status(400).send("Usuário/senha incorretos")
 
         const isCorrectPassword = bcrypt.compareSync(password, isUserSignedUp.password)
         if (!isCorrectPassword) return res.status(400).send("Usuário/senha incorretos")
 
         const token = uuidV4()
-        await db.collection("sessions").insertOne({idUser: isUserSignedUp._id, token})
-        return res.status(200).send(token)
-    } catch(error){
+        await db.collection("sessions").insertOne({ idUser: isUserSignedUp._id, token })
+        return res.status(200).send({token, isUserSignedUp})
+    } catch (error) {
         return res.status(500).send(error.message)
+    }
+}
+
+export async function logoff(req, res) {
+    const {authorization} = req.headers
+    const token = authorization?.replace("Bearer ", '')
+    try{
+        await db.collection("sessions").deleteOne({token})
+        return res.status(200).send("Sessão encerrada! Direcionado para página de login")
+    }catch(err){
+        return res.status(500)
     }
 }

@@ -1,5 +1,7 @@
 import db from "../config/database.js"
 import { cashSchema } from "../schemas/cashSchema.js"
+import dayjs from "dayjs"
+import { ObjectId } from "mongodb"
 
 export async function cashflowList(req, res) {
     const { authorization } = req.headers
@@ -12,13 +14,11 @@ export async function cashflowList(req, res) {
 
         if (!isSessionActivated) return res.status(401).send("Sessão expirada! Por favor faça login novamente.")
 
-        const user = await db.collection("users").findOne({ _id: isSessionActivated.idUser })
+        const user = await db.collection("users").findOne({ _id: ObjectId(isSessionActivated.idUser) })
         if (!user) return res.status(401).send("Usuário não cadastrado!")
 
-        const cashflow = await db.collection("cashflow").find().toArray()
-        const filteredCashflow = cashflow.filter(e => e.userId !== user._id)
-
-        return res.status(200).send(filteredCashflow)
+        const cashflow = await db.collection("cashflow").find({userId: ObjectId(user._id)}).toArray()
+        return res.status(200).send(cashflow)
     } catch (error) {
         return res.status(500).send(error.message)
     }
@@ -28,12 +28,36 @@ export async function addProfit(req, res) {
     const { authorization } = req.headers
     const token = authorization?.replace("Bearer ", '')
     const { value, description } = req.body
+    try {
+        const isSessionActivated = await db.collection("sessions").findOne({ token })
+        if (!isSessionActivated) return res.status(401).send("Sessão expirada! Por favor faça login novamente.")
 
-    const { error } = cashSchema.validate({ value, description })
-    if (error) {
-        const errorMessages = error.details.map(err => err.message)
-        return res.status(422).send(errorMessages)
+        const user = await db.collection("users").findOne({ _id: isSessionActivated.idUser })
+        if (!user) return res.status(401).send("Usuário não cadastrado!")
+
+        await db.collection("cashflow").insertOne(
+            {
+                userId: user._id,
+                value,
+                description,
+                isPositive: true,
+                date: dayjs().format('DD/MM')
+            }
+        )
+        await db.collection("balance").insertOne({value: Number(value)})
+        const sum = await db.collection("balance").find().toArray()
+        res.status(201).send(sum)
+
+    } catch(err){
+        res.status(500).send(err.message)
     }
+
+}
+
+export async function addCost(req, res) {
+    const { authorization } = req.headers
+    const token = authorization?.replace("Bearer ", '')
+    const { value, description } = req.body
 
     try {
         const isSessionActivated = await db.collection("sessions").findOne({ token })
@@ -47,19 +71,16 @@ export async function addProfit(req, res) {
                 userId: user._id,
                 value,
                 description,
-                isPositive: true
+                isPositive: false,
+                date: dayjs().format('DD/MM')
             }
         )
-        res.status(201).send("Entrada criada com sucesso!")
+        await db.collection("balance").insertOne({value: Number(value) * (-1)})
+        const sum = await db.collection("balance").find().toArray()
+        res.status(201).send(sum)
 
     } catch(err){
         res.status(500).send(err.message)
     }
 
 }
-
-/*
-        //1. procurar objeto em sessions
-        //2. pegar idUser em users
-        //3. filtrar receita somente para aquele idUser
- */
