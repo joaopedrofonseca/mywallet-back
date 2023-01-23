@@ -18,7 +18,8 @@ export async function cashflowList(req, res) {
         if (!user) return res.status(401).send("Usuário não cadastrado!")
 
         const cashflow = await db.collection("cashflow").find({userId: ObjectId(user._id)}).toArray()
-        return res.status(200).send(cashflow)
+        const balance = await db.collection("balance").find({userId: user._id}).toArray()
+        return res.status(200).send({cashflow, balance})
     } catch (error) {
         return res.status(500).send(error.message)
     }
@@ -44,9 +45,8 @@ export async function addProfit(req, res) {
                 date: dayjs().format('DD/MM')
             }
         )
-        await db.collection("balance").insertOne({value: Number(value)})
-        const sum = await db.collection("balance").find().toArray()
-        res.status(201).send(sum)
+        await db.collection("balance").insertOne({value: Number(value), userId: user._id})
+        res.sendStatus(201)
 
     } catch(err){
         res.status(500).send(err.message)
@@ -75,9 +75,8 @@ export async function addCost(req, res) {
                 date: dayjs().format('DD/MM')
             }
         )
-        await db.collection("balance").insertOne({value: Number(value) * (-1)})
-        const sum = await db.collection("balance").find().toArray()
-        res.status(201).send(sum)
+        await db.collection("balance").insertOne({value: Number(value) * (-1), userId: user._id})
+        res.sendStatus(201)
 
     } catch(err){
         res.status(500).send(err.message)
